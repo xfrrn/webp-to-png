@@ -106,3 +106,9 @@ SEO 测试域名 `https://converter.acme.org` 只是明确标注的格式样本�
 Wrangler 配置只含静态资产，没有服务器入口和 SPA 回退。E2E 运行真实 `wrangler dev --local`，验证 `force-trailing-slash`、404-page 和根目录 `404.html`。项目配置关闭 Wrangler 遥测；它不等同于生产网站统计。
 
 GitHub Actions 检查工作流已编写，尚未在 GitHub 运行；不会自动部署。正式账号、项目名确认、域名 DNS / TLS、缓存与响应头、可访问性辅助技术实机检查，以及 Firefox / WebKit 等扩展验收留到后续阶段。没有推送、部署、付费资源、Search Console 提交或搜索排名声明。
+
+## 后续修复：发布检查兼容 JSONC（2026-09-08）
+
+Cloudflare 日志显示静态构建成功，但发布检查用 `JSON.parse` 读取含尾随逗号的 `wrangler.jsonc` 时失败。改为将锁文件已有的 `jsonc-parser` 3.3.1 声明为直接开发依赖，支持注释和尾随逗号，并检查解析错误列表，拒绝带语法错误的部分解析结果。语法错误现在显示文件名、错误类型和行列；配置文件与 Node 版本文件的读取错误分别报告。现有域名和路由配置没有改动。
+
+新增 9 项实际运行发布检查脚本的回归测试；全部 44 项单元测试、类型检查和 lint 通过。使用用户截图中的生产环境变量，在本地执行 `pnpm build` 和 `pnpm check:release` 均通过；未运行 `wrangler deploy`，线上重建结果仍需另行验证。本次未重跑浏览器测试，因为变更仅涉及 Node 发布检查脚本。
