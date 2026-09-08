@@ -1,0 +1,11 @@
+
+> webp-to-png-converter@1.0.0 check:release D:\codes\SEO\webp-to-png
+> node --env-file-if-exists=.env scripts/check-release.ts
+
+.env not found. Continuing without it.
+Release is not ready:
+- Production requires a real HTTPS SITE_URL.
+- Set DEPLOY_ENV=production for the release build.
+- Set MAINTAINER_NAME before publication.
+- Set a real CONTACT_EMAIL before publication.
+ ELIFECYCLE  Command failed with exit code 1.

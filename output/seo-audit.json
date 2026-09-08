@@ -1,0 +1,28 @@
+{
+  "results": [
+    {
+      "environment": "local",
+      "pages": 6,
+      "indexablePages": 0,
+      "sitemapFiles": []
+    },
+    {
+      "environment": "preview",
+      "pages": 6,
+      "indexablePages": 0,
+      "sitemapFiles": []
+    },
+    {
+      "environment": "production",
+      "pages": 6,
+      "indexablePages": 5,
+      "sitemapFiles": [
+        "sitemap-0.xml",
+        "sitemap-index.xml"
+      ]
+    }
+  ],
+  "productionWithoutDomain": "correctly rejected",
+  "fixtureOrigin": "https://converter.acme.org",
+  "note": "Isolated build fixtures only; not a configured or deployed production domain."
+}

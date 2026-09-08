@@ -1,0 +1,7 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { buildSite as site } from '../config/build-site';
+---
+<Layout title="About – WebP to PNG Converter" description="Learn what this free, browser-based WebP to PNG converter does, its supported formats, and how the project is maintained.">
+  <article class="article"><a class="breadcrumb" href="/">← Back to the converter</a><h1>A small tool with one job.</h1><p>{site.name} turns static WebP images into PNG files using your own browser. It is for the moments when an app, document, or workflow needs PNG instead.</p><h2>What it supports</h2><p>Single images, small batches, transparent backgrounds, individual PNG downloads, and ZIP downloads. There is no account, cloud storage, image editor, or conversion history.</p><p>The original dimensions are preserved. Animated WebP is rejected. Color handling follows the browser, and metadata such as EXIF and ICC profiles is not guaranteed to survive canvas export.</p><h2>Maintenance and contact</h2>{site.maintainer && site.contact ? <p>Maintained by {site.maintainer}. For support or feedback, contact <a href={`mailto:${site.contact}`}>{site.contact}</a>. Please describe the issue without sending private images.</p> : <p>Maintainer and contact details have not been published yet. They will be added before public release.</p>}<h2>Need a hand?</h2><p>The <a href="/guides/convert-webp-to-png/">conversion guide</a> walks through a tested example, including transparent images and files that cannot be converted.</p></article>
+</Layout>

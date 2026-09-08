@@ -1,0 +1,5 @@
+{
+  "phase": "selection, conversion, PNG and ZIP download; excludes subsequent page reload",
+  "httpRequests": [],
+  "persistentStorageEntries": 0
+}

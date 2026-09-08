@@ -1,0 +1,26 @@
+{
+  "browser": "Chromium 153.0.8010.12",
+  "measurements": [
+    {
+      "name": "lossy",
+      "width": 640,
+      "height": 400,
+      "inputBytes": 4338,
+      "outputBytes": 55569
+    },
+    {
+      "name": "lossless",
+      "width": 640,
+      "height": 400,
+      "inputBytes": 1074,
+      "outputBytes": 9253
+    },
+    {
+      "name": "transparent",
+      "width": 320,
+      "height": 240,
+      "inputBytes": 420,
+      "outputBytes": 3384
+    }
+  ]
+}

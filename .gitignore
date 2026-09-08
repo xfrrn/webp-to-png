@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.astro/
+.wrangler/
+.env
+.env.*
+!.env.example
+test-results/
+playwright-report/
+output/playwright/report/
+output/playwright/results/
+*.log
+output/seo-local/
+output/seo-preview/
+output/seo-production/
+output/seo-rejected/
