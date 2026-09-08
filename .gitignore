@@ -7,10 +7,5 @@ dist/
 !.env.example
 test-results/
 playwright-report/
-output/playwright/report/
-output/playwright/results/
+output/
 *.log
-output/seo-local/
-output/seo-preview/
-output/seo-production/
-output/seo-rejected/

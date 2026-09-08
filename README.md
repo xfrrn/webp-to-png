@@ -71,7 +71,7 @@ pnpm preview:cloudflare
 pnpm exec playwright show-report output/playwright/report
 ```
 
-截图、实际 PNG / ZIP、网络和路由记录位于 `output/playwright/`，总检查日志为 `output/verify.txt`。
+截图、实际 PNG / ZIP、网络和路由记录位于 `output/playwright/`，总检查日志为 `output/verify.txt`。整个 `output/` 是本地生成的验收产物，不纳入 Git；新克隆需运行测试生成对应报告和截图。网站指南使用的 `public/guide/` 和可重复测试需要的 `tests/fixtures/` 继续纳入 Git。
 
 ## 集中配置
 
@@ -143,7 +143,7 @@ tests/e2e/          Chromium 真实浏览器验收
 tests/fixtures/     自制 WebP 与错误样本、来源说明
 public/guide/       指南素材、真实结果截图与数据
 docs/              开发和验收记录
-output/            实际执行证据（临时构建与 HTML 报告目录已忽略）
+output/            本地生成的实际执行证据（整个目录已忽略）
 ```
 
 公开图片来自本项目自制测试素材；无需外部图片授权。Python / Pillow 仅用于重新生成测试素材，不是运行或部署依赖。
