@@ -18,6 +18,7 @@ export function siteConfig(env: Record<string, string | undefined>) {
   return {
     environment,
     indexable: production,
+    analytics: production && env.PLAUSIBLE_ENABLED === 'true',
     // Non-production never emits a placeholder canonical or sitemap.
     origin: production ? new URL(origin).origin : undefined,
     name: env.PUBLIC_SITE_NAME?.trim() || 'WebP to PNG Converter',

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { LIMITS, formatBytes } from '../../src/config/limits';
 import { releaseErrors, siteConfig } from '../../src/config/site';
-import { checkCount, checkFileSize, checkPixels, inspectWebP } from '../../src/lib/webp';
+import { checkFileSize, checkPixels, inspectWebP } from '../../src/lib/webp';
 import { pngName, makeZip } from '../../src/lib/files';
 import { sanitize, track } from '../../src/lib/analytics';
 
@@ -31,8 +31,6 @@ describe('WebP trust boundary and project limits', () => {
     expect(inspectWebP(bytes.buffer)).toEqual({ width: 640, height: 400 });
   });
   it('accepts boundary values and rejects excessive or empty input', () => {
-    expect(() => checkCount(8, 2)).not.toThrow();
-    expect(() => checkCount(9, 2)).toThrow(/10 images/);
     expect(() => checkFileSize(LIMITS.inputBytes)).not.toThrow();
     expect(() => checkFileSize(LIMITS.inputBytes + 1)).toThrow(/10 MB/);
     expect(() => checkFileSize(0)).toThrow();
@@ -69,7 +67,7 @@ describe('analytics privacy', () => {
 });
 describe('indexing and release configuration', () => {
   it.each(['local', 'preview'])('%s remains noindex even in production NODE_ENV', mode => {
-    expect(siteConfig({ DEPLOY_ENV: mode, NODE_ENV: 'production', SITE_URL: 'https://converter.acme.org' })).toMatchObject({ indexable: false, origin: undefined });
+    expect(siteConfig({ DEPLOY_ENV: mode, NODE_ENV: 'production', SITE_URL: 'https://converter.acme.org', PLAUSIBLE_ENABLED: 'true' })).toMatchObject({ indexable: false, origin: undefined, analytics: false });
   });
   it.each(['', 'https://example.com', 'http://converter.acme.org', 'https://localhost', 'https://preview.acme.org', 'https://app.workers.dev', 'https://acme.test', 'https://127.0.0.1', 'https://acme.org/path', 'https://acme.org/?query=1'])('blocks invalid production origin %s', origin => {
     expect(() => siteConfig({ DEPLOY_ENV: 'production', SITE_URL: origin })).toThrow();
@@ -77,6 +75,8 @@ describe('indexing and release configuration', () => {
   it('accepts a production origin, rejects missing external settings', () => {
     const env = { DEPLOY_ENV: 'production', SITE_URL: 'https://converter.acme.org', MAINTAINER_NAME: 'QA fixture', CONTACT_EMAIL: 'qa@acme.org' };
     expect(siteConfig(env)).toMatchObject({ indexable: true, origin: 'https://converter.acme.org' });
+    expect(siteConfig(env).analytics).toBe(false);
+    expect(siteConfig({ ...env, PLAUSIBLE_ENABLED: 'true' }).analytics).toBe(true);
     expect(releaseErrors(env)).toEqual([]);
     expect(releaseErrors({})).toHaveLength(4);
   });

@@ -16,23 +16,30 @@ describe('queue lifecycle and event semantics (conversion is stubbed only in the
   let queue: ConversionQueue;
   beforeEach(() => { vi.clearAllMocks(); queue = new ConversionQueue(); vi.mocked(convertWebP).mockResolvedValue(result()); });
   afterEach(() => queue.clear());
-  it('does not record empty or invalid batches, gives each file a unique ID', async () => {
+  it('records selections and rejected inputs, converts valid files automatically with unique names', async () => {
     await queue.start();
+    await queue.add([]);
+    expect(track).not.toHaveBeenCalled();
     await queue.add([new File(['no image'], 'fake.webp')]);
     await queue.start();
-    expect(track).not.toHaveBeenCalled();
+    expect(track).toHaveBeenCalledWith('conversion_failed', { stage: 'validation', reason: 'damaged_file' });
+    expect(convertWebP).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalledWith('conversion_succeeded', expect.anything());
     queue.clear();
+    vi.clearAllMocks();
     await queue.add([file(), file()]);
     const items = queue.getSnapshot().items;
     expect(new Set(items.map(item => item.id)).size).toBe(2);
     expect(items.map(item => item.name)).toEqual(['image.png', 'image (2).png']);
-    expect(track).toHaveBeenCalledExactlyOnceWith('files_selected', { count: 2, size_bucket: 'under_1mb' });
+    expect(items.every(item => item.status === 'success')).toBe(true);
+    expect(track).toHaveBeenCalledWith('files_selected', { count: 2, size_bucket: 'under_1mb' });
+    expect(track).toHaveBeenCalledWith('conversion_succeeded', { count: 2 });
   });
   it('serializes work and ignores repeated starts', async () => {
     const pending = deferred<ReturnType<typeof result>>();
     vi.mocked(convertWebP).mockReturnValueOnce(pending.promise);
-    await queue.add([file(), file()]);
-    const running = queue.start();
+    const running = queue.add([file(), file()]);
+    await vi.waitFor(() => expect(convertWebP).toHaveBeenCalledTimes(1));
     await queue.start();
     expect(convertWebP).toHaveBeenCalledTimes(1);
     pending.resolve(result());
@@ -45,8 +52,8 @@ describe('queue lifecycle and event semantics (conversion is stubbed only in the
   it('clear prevents stale writes and reports cancellation instead of full success', async () => {
     const pending = deferred<ReturnType<typeof result>>();
     vi.mocked(convertWebP).mockReturnValueOnce(pending.promise);
-    await queue.add([file(), file()]);
-    const running = queue.start();
+    const running = queue.add([file(), file()]);
+    await vi.waitFor(() => expect(convertWebP).toHaveBeenCalledTimes(1));
     queue.clear();
     expect(queue.getSnapshot().running).toBe(true);
     pending.resolve(result());
@@ -63,13 +70,14 @@ describe('queue lifecycle and event semantics (conversion is stubbed only in the
     pending.resolve(await file().arrayBuffer());
     await adding;
     expect(queue.getSnapshot().items).toHaveLength(0);
-    expect(track).not.toHaveBeenCalled();
+    expect(convertWebP).not.toHaveBeenCalled();
+    expect(track).not.toHaveBeenCalledWith('conversion_started', expect.anything());
   });
   it('remove during conversion drops only the removed result', async () => {
     const pending = deferred<ReturnType<typeof result>>();
     vi.mocked(convertWebP).mockReturnValueOnce(pending.promise);
-    await queue.add([file(), file()]);
-    const running = queue.start();
+    const running = queue.add([file(), file()]);
+    await vi.waitFor(() => expect(convertWebP).toHaveBeenCalledTimes(1));
     queue.remove(queue.getSnapshot().items[0].id);
     pending.resolve(result());
     await running;
@@ -95,5 +103,27 @@ describe('queue lifecycle and event semantics (conversion is stubbed only in the
     queue.clear();
     expect(revoke).toHaveBeenCalledTimes(1);
     revoke.mockRestore();
+  });
+  it('accepts remaining slots, lists overflow files and never exceeds the queue limit', async () => {
+    await queue.add([file('existing.webp')]);
+    await queue.add(Array.from({ length: 11 }, (_, index) => file(`${index}.webp`)));
+    expect(queue.getSnapshot().items).toHaveLength(10);
+    expect(queue.getSnapshot().skipped).toEqual(['9.webp', '10.webp']);
+    expect(convertWebP).toHaveBeenCalledTimes(10);
+    await queue.add([file('full.webp')]);
+    expect(queue.getSnapshot().skipped).toEqual(['full.webp']);
+    expect(convertWebP).toHaveBeenCalledTimes(10);
+  });
+  it('removes completed results, releases URLs and preserves retryable failures', async () => {
+    vi.mocked(convertWebP).mockRejectedValueOnce(new ToolError('export'));
+    await queue.add([file('retry.webp'), file('done.webp')]);
+    const revoke = vi.spyOn(URL, 'revokeObjectURL');
+    queue.removeCompleted();
+    expect(queue.getSnapshot().items.map(item => item.originalName)).toEqual(['retry.webp']);
+    expect(revoke).toHaveBeenCalledTimes(1);
+    revoke.mockRestore();
+    await queue.start(queue.getSnapshot().items[0].id);
+    await queue.add([file('next.webp')]);
+    expect(queue.getSnapshot().items.map(item => item.status)).toEqual(['success', 'success']);
   });
 });

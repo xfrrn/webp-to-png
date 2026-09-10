@@ -7,11 +7,10 @@ const fixture = (name: string) => path.resolve('tests/fixtures', name);
 const evidence = path.resolve('output/playwright');
 mkdirSync(evidence, { recursive: true });
 const choose = (page: Page) => page.getByRole('button', { name: 'Choose WebP files', exact: true });
-const convert = (page: Page) => page.getByRole('button', { name: /^Convert to PNG/ });
 const rows = (page: Page) => page.getByTestId('file-row');
 async function open(page: Page) { await page.goto('/'); await expect(choose(page)).toBeEnabled(); }
 async function add(page: Page, names: string[]) { await page.getByLabel('Choose WebP files', { exact: true }).setInputFiles(names.map(fixture)); }
-async function run(page: Page, count: number) { await expect(convert(page)).toBeEnabled(); await convert(page).click(); await expect(page.locator('.status-success')).toHaveCount(count); await expect(page.getByRole('button', { name: 'Download all (.zip)' })).toBeEnabled(); }
+async function run(page: Page, count: number) { await expect(page.locator('.status-success')).toHaveCount(count); await expect(page.getByRole('button', { name: 'Download all (.zip)' })).toBeEnabled(); }
 async function download(page: Page, buttonName: string, destination: string) {
   const pending = page.waitForEvent('download');
   await page.getByRole('button', { name: buttonName, exact: true }).click();
@@ -72,6 +71,49 @@ test('bulk input, duplicate-safe single names, and real ZIP contents', async ({ 
   expect(await inspectPng(page, contents['same (2).png'])).toMatchObject({ width: 320, height: 240, cornerAlpha: 0 });
 });
 
+test('overflow keeps the first ten files, names the rest and frees slots after removal', async ({ page }) => {
+  await open(page);
+  const buffer = readFileSync(fixture('transparent.webp'));
+  await page.getByLabel('Choose WebP files', { exact: true }).setInputFiles(Array.from({ length: 12 }, (_, i) => ({ name: `image-${i}.webp`, mimeType: 'image/webp', buffer })));
+  await run(page, 10);
+  await expect(rows(page)).toHaveCount(10);
+  await expect(choose(page)).toBeDisabled();
+  await expect(page.locator('.skipped-files')).toContainText('2 files were not added');
+  await page.getByText('See files not added', { exact: true }).click();
+  await expect(page.locator('.skipped-files li')).toHaveText(['image-10.webp', 'image-11.webp']);
+  await page.getByRole('button', { name: 'Remove completed', exact: true }).click();
+  await expect(rows(page)).toHaveCount(0);
+  await expect(choose(page)).toBeEnabled();
+  await add(page, ['transparent.webp']);
+  await run(page, 1);
+  await expect(page.locator('.skipped-files')).toHaveCount(0);
+});
+
+test('native preview supports keyboard close, downloads and focus restoration; removal keeps failed rows', async ({ page }) => {
+  await open(page);
+  await add(page, ['transparent.webp', 'disguised.webp']);
+  await run(page, 1);
+  const thumbnail = page.getByRole('button', { name: 'Preview transparent.png', exact: true });
+  await thumbnail.focus();
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'transparent.png', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('img')).toBeVisible();
+  await expect(dialog).toContainText('320 × 240');
+  await page.screenshot({ path: path.join(evidence, 'preview-desktop.png') });
+  await page.keyboard.press('Escape');
+  await expect(dialog).not.toBeVisible();
+  await expect(thumbnail).toBeFocused();
+  await thumbnail.click();
+  const result = await download(page, 'Save preview PNG', 'preview.png');
+  expect(result.name).toBe('transparent.png');
+  await dialog.getByRole('button', { name: 'Close preview' }).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByRole('button', { name: 'Remove completed', exact: true }).click();
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page)).toContainText('disguised.webp');
+});
+
 test('mixed invalid, disguised, animated and truncated inputs cannot stop a valid image', async ({ page }) => {
   await open(page);
   await add(page, ['lossy.webp', 'disguised.webp', 'animated.webp', 'truncated.webp', 'empty.webp']);
@@ -85,32 +127,24 @@ test('mixed invalid, disguised, animated and truncated inputs cannot stop a vali
 test('real corrupt payload fails decoding; wholly invalid queues cannot convert', async ({ page }) => {
   await open(page);
   await add(page, ['damaged.webp']);
-  await expect(convert(page)).toBeEnabled();
-  await convert(page).click();
   await expect(page.locator('.status-error')).toHaveCount(1);
   await expect(page.getByText('Your browser could not decode this WebP.', { exact: false })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Retry damaged.webp' })).toBeEnabled();
   await page.getByRole('button', { name: 'Clear all' }).click();
   await add(page, ['disguised.webp', 'animated.webp']);
   await expect(page.locator('.status-error')).toHaveCount(2);
-  await expect(convert(page)).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Download all (.zip)' })).toBeDisabled();
   await page.screenshot({ path: path.join(evidence, 'all-failed.png') });
 });
 
-test('quantity, bytes, and pixel caps reject before image decoding', async ({ page }) => {
+test('byte and pixel caps reject before image decoding', async ({ page }) => {
   await page.addInitScript(() => { window.createImageBitmap = () => { throw Error('Decoder must not be reached for oversized images'); }; });
   await open(page);
-  const original = readFileSync(fixture('lossy.webp'));
-  await page.getByLabel('Choose WebP files', { exact: true }).setInputFiles(Array.from({ length: 11 }, (_, i) => ({ name: `image-${i}.webp`, mimeType: 'image/webp', buffer: original })));
-  await expect(page.getByRole('alert')).toContainText('10 images');
-  await expect(rows(page)).toHaveCount(0);
   await page.getByLabel('Choose WebP files', { exact: true }).setInputFiles([{ name: 'large.webp', mimeType: 'image/webp', buffer: Buffer.alloc(10_000_001) }]);
   await expect(page.locator('.file-error')).toContainText('10 MB');
   await add(page, ['over-pixels.webp']);
   await expect(page.locator('.status-error')).toHaveCount(2);
   await expect(page.getByText('This image exceeds the 20 megapixel limit.', { exact: false })).toBeVisible();
-  await expect(convert(page)).toBeDisabled();
 });
 
 test('drag-and-drop accepts a WebP regardless of misleading extension or MIME', async ({ page }) => {
@@ -135,8 +169,6 @@ for (const action of ['clear', 'remove'] as const) {
     });
     await open(page);
     await add(page, ['lossy.webp', 'transparent.webp']);
-    await expect(convert(page)).toBeEnabled();
-    await convert(page).click();
     await expect(page.locator('.status-processing')).toHaveCount(1);
     if (action === 'clear') await page.getByRole('button', { name: 'Clear all' }).click();
     else await page.getByRole('button', { name: 'Remove lossy.webp', exact: true }).click();
@@ -156,8 +188,6 @@ test('PNG export failure is visible and retry performs a real conversion (fault 
   });
   await open(page);
   await add(page, ['lossy.webp', 'transparent.webp']);
-  await expect(convert(page)).toBeEnabled();
-  await convert(page).click();
   await expect(page.locator('.status-error')).toHaveCount(1);
   await expect(page.locator('.status-success')).toHaveCount(1);
   await expect(page.getByText('Your browser could not create the PNG.', { exact: false })).toBeVisible();
@@ -198,6 +228,40 @@ test('selected images and filenames generate no HTTP requests, and nothing is pe
   await expect(rows(page)).toHaveCount(0);
 });
 
+test('enabled analytics sends a sanitized funnel and blocked analytics never stops conversion', async ({ page }) => {
+  const events: { name: string; props: Record<string, unknown>; url: string }[] = [];
+  let blocked = false;
+  // Exercise the production marker in the local build; every provider request is intercepted.
+  await page.route('http://127.0.0.1:8787/**', async route => {
+    if (!route.request().isNavigationRequest() || new URL(route.request().url()).pathname !== '/') return route.continue();
+    const response = await route.fetch();
+    const body = (await response.text()).replace('<head>', '<head><meta name="analytics-domain" content="127.0.0.1"><link rel="canonical" href="http://127.0.0.1:8787/">');
+    await route.fulfill({ response, body });
+  });
+  await page.route('https://plausible.io/api/event', async route => {
+    if (blocked) return route.abort();
+    events.push(route.request().postDataJSON());
+    await route.fulfill({ status: 202, headers: { 'Access-Control-Allow-Origin': '*' }, body: '{}' });
+  });
+  await page.goto('/?private-query=secret#private-fragment');
+  await expect(choose(page)).toBeEnabled();
+  await page.getByLabel('Choose WebP files', { exact: true }).setInputFiles([
+    { name: 'confidential-client.webp', mimeType: 'image/webp', buffer: readFileSync(fixture('transparent.webp')) },
+    { name: 'private-broken.webp', mimeType: 'image/webp', buffer: Buffer.from('bad') },
+  ]);
+  await run(page, 1);
+  await download(page, 'Download confidential-client.png', 'analytics.png');
+  await expect.poll(() => events.map(event => event.name)).toEqual(expect.arrayContaining(['pageview', 'files_selected', 'conversion_started', 'conversion_succeeded', 'conversion_completed', 'conversion_failed', 'download_clicked']));
+  expect(events.find(event => event.name === 'conversion_failed')?.props).toEqual({ stage: 'validation', reason: 'damaged_file' });
+  expect(events.every(event => event.url === 'http://127.0.0.1:8787/')).toBe(true);
+  expect(JSON.stringify(events)).not.toMatch(/confidential|private|secret|\.webp|\.png/);
+  blocked = true;
+  await page.getByRole('button', { name: 'Clear all' }).click();
+  await add(page, ['lossy.webp']);
+  await run(page, 1);
+  await expect(page.getByRole('button', { name: 'Download lossy.png', exact: true })).toBeEnabled();
+});
+
 for (const viewport of [{ width: 1440, height: 900 }, { width: 1920, height: 1080 }, { width: 390, height: 844 }]) {
   test(`layout and long filenames at ${viewport.width}×${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport);
@@ -209,6 +273,11 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1920, height: 108
     await expect(page.locator('.file-label img')).toHaveCount(0);
     await page.screenshot({ path: path.join(evidence, `layout-${viewport.width}.png`), fullPage: true });
     if (viewport.width === 390) await page.screenshot({ path: path.join(evidence, 'mobile-390-viewport.png') });
+    await page.getByRole('button', { name: /^Preview / }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    expect(await page.getByRole('dialog').evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await page.screenshot({ path: path.join(evidence, `preview-${viewport.width}.png`) });
+    await page.keyboard.press('Escape');
   });
 }
 
@@ -227,7 +296,6 @@ test('guide examples and completed screenshot are visible, including on mobile',
 
 test('keyboard selection, conversion, and download; inactive actions disabled in empty state', async ({ page }) => {
   await open(page);
-  await expect(convert(page)).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Download all (.zip)' })).toBeDisabled();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
@@ -236,9 +304,6 @@ test('keyboard selection, conversion, and download; inactive actions disabled in
   const chooser = page.waitForEvent('filechooser');
   await page.keyboard.press('Enter');
   await (await chooser).setFiles(fixture('lossy.webp'));
-  await expect(convert(page)).toBeEnabled();
-  await convert(page).focus();
-  await page.keyboard.press('Enter');
   await expect(page.locator('.status-success')).toHaveCount(1);
   await page.getByRole('button', { name: 'Download lossy.png', exact: true }).focus();
   const pending = page.waitForEvent('download');

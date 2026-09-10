@@ -3,7 +3,6 @@ export const errorMessages = {
   damaged_file: 'This WebP file is empty, damaged, or incomplete. Try exporting it again.',
   animation: 'Animated WebP is not supported. Choose a static image instead.',
   file_size: 'This file exceeds the 10 MB input limit.',
-  file_count: 'Your queue can hold up to 10 images. Remove some files and try again.',
   pixels: 'This image exceeds the 20 megapixel limit. Resize it before converting.',
   decode: 'Your browser could not decode this WebP. Try exporting it again or use an updated browser.',
   export: 'Your browser could not create the PNG. Free some memory and retry.',

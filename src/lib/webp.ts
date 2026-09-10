@@ -10,9 +10,6 @@ export function checkFileSize(size: number) {
   if (!size) throw new ToolError('damaged_file');
   if (size > LIMITS.inputBytes) throw new ToolError('file_size');
 }
-export function checkCount(current: number, added: number) {
-  if (current + added > LIMITS.files) throw new ToolError('file_count');
-}
 
 // Parse RIFF chunk boundaries; never identify animation by searching arbitrary payload bytes.
 export function inspectWebP(buffer: ArrayBuffer): Dimensions {

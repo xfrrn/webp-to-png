@@ -8,4 +8,5 @@ export const buildSite = siteConfig({
   PUBLIC_SITE_NAME: import.meta.env.PUBLIC_SITE_NAME,
   MAINTAINER_NAME: import.meta.env.MAINTAINER_NAME,
   CONTACT_EMAIL: import.meta.env.CONTACT_EMAIL,
+  PLAUSIBLE_ENABLED: import.meta.env.PLAUSIBLE_ENABLED,
 });

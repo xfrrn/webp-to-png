@@ -3,18 +3,18 @@ import { track, durationBucket, sizeBucket } from './analytics';
 import { convertWebP } from './convert';
 import { ToolError, errorCode, errorMessages, type ErrorCode } from './errors';
 import { downloadUrl, makeZip, pngName } from './files';
-import { checkCount, validateFile, type Dimensions } from './webp';
+import { validateFile, type Dimensions } from './webp';
 
 export type Item = {
   id: string; originalName: string; name: string; inputBytes: number; file?: File;
   status: 'checking' | 'queued' | 'processing' | 'success' | 'error';
   dimensions?: Dimensions; blob?: Blob; url?: string; error?: ErrorCode;
 };
-type State = { items: Item[]; importing: boolean; running: boolean; packing: boolean; message: string; summary: string };
+type State = { items: Item[]; skipped: string[]; importing: boolean; running: boolean; packing: boolean; message: string; summary: string };
 
 // One controller owns the queue; React only subscribes and renders it.
 export class ConversionQueue {
-  private state: State = { items: [], importing: false, running: false, packing: false, message: '', summary: '' };
+  private state: State = { items: [], skipped: [], importing: false, running: false, packing: false, message: '', summary: '' };
   private listeners = new Set<() => void>();
   private generation = 0;
   private conversion?: AbortController;
@@ -29,8 +29,11 @@ export class ConversionQueue {
 
   async add(files: File[]) {
     if (!files.length || this.state.importing || this.state.running || this.state.packing) return;
-    try { checkCount(this.state.items.length, files.length); }
-    catch { this.update({ message: errorMessages.file_count }); return; }
+    const available = LIMITS.files - this.state.items.length;
+    const skipped = files.slice(available).map(file => file.name);
+    files = files.slice(0, available);
+    this.update({ skipped, message: '' });
+    if (!files.length) return;
     const generation = this.generation;
     const used = this.state.items.map(item => item.name);
     const added: Item[] = files.map(file => {
@@ -39,7 +42,7 @@ export class ConversionQueue {
       return { id: crypto.randomUUID(), originalName: file.name, name, file, inputBytes: file.size, status: 'checking' };
     });
     this.update({ items: [...this.state.items, ...added], importing: true, message: '', summary: '' });
-    const valid: Item[] = [];
+    track('files_selected', { count: added.length, size_bucket: sizeBucket(Math.max(...added.map(item => item.inputBytes))) });
     try {
       for (const item of added) {
         if (generation !== this.generation) break;
@@ -48,14 +51,16 @@ export class ConversionQueue {
           const dimensions = await validateFile(item.file!);
           if (generation !== this.generation || !this.exists(item.id)) continue;
           this.patch(item.id, { status: 'queued', dimensions });
-          valid.push(item);
         } catch (error) {
-          if (generation === this.generation) this.patch(item.id, { status: 'error', error: errorCode(error, 'damaged_file'), file: undefined });
+          if (generation === this.generation && this.exists(item.id)) {
+            const reason = errorCode(error, 'damaged_file');
+            this.patch(item.id, { status: 'error', error: reason, file: undefined });
+            track('conversion_failed', { stage: 'validation', reason });
+          }
         }
       }
-      const current = valid.filter(item => this.exists(item.id));
-      if (generation === this.generation && current.length) track('files_selected', { count: current.length, size_bucket: sizeBucket(Math.max(...current.map(item => item.inputBytes))) });
     } finally { this.update({ importing: false }); }
+    if (generation === this.generation) await this.start();
   }
 
   async start(onlyId?: string) {
@@ -80,7 +85,11 @@ export class ConversionQueue {
           const url = URL.createObjectURL(result.blob);
           this.patch(item.id, { status: 'success', dimensions: { width: result.width, height: result.height }, blob: result.blob, url, file: undefined });
         } catch (error) {
-          if (!controller.signal.aborted) this.patch(item.id, { status: 'error', error: errorCode(error, 'export') });
+          if (!controller.signal.aborted && this.exists(item.id)) {
+            const reason = errorCode(error, 'export');
+            this.patch(item.id, { status: 'error', error: reason });
+            track('conversion_failed', { stage: 'conversion', reason });
+          }
         }
       }
     } finally {
@@ -88,6 +97,7 @@ export class ConversionQueue {
       const success = current.filter(item => item.status === 'success').length;
       const failed = current.filter(item => item.status === 'error').length;
       const cancelled = batch.length - success - failed;
+      if (success) track('conversion_succeeded', { count: success });
       track('conversion_completed', { success, failed, cancelled, duration_bucket: durationBucket(performance.now() - started) });
       this.conversion = undefined;
       this.update({ running: false, summary: cancelled ? `Conversion cancelled. ${success} ready, ${failed} failed, ${cancelled} cancelled.` : `${success} ready to download${failed ? `, ${failed} failed. Check the file messages below.` : '.'}` });
@@ -101,6 +111,10 @@ export class ConversionQueue {
     if (item?.url) URL.revokeObjectURL(item.url);
     this.update({ items: this.state.items.filter(item => item.id !== id), message: '', summary: '' });
   }
+  removeCompleted() {
+    if (this.state.importing || this.state.running || this.state.packing) return;
+    this.state.items.filter(item => item.status === 'success').forEach(item => this.remove(item.id));
+  }
   clear() {
     this.generation++;
     this.conversion?.abort();
@@ -108,14 +122,14 @@ export class ConversionQueue {
     this.state.items.forEach(item => { if (item.url) URL.revokeObjectURL(item.url); });
     this.downloads.forEach((_, url) => this.releaseDownload(url));
     // Keep busy locks until outstanding native work settles; prevent overlapping decodes after Clear.
-    this.update({ items: [], message: '', summary: '' });
+    this.update({ items: [], skipped: [], message: '', summary: '' });
   }
   download(id: string) {
     const item = this.state.items.find(item => item.id === id);
     if (!item?.url) return;
     track('download_clicked', { type: 'png', count: 1 });
     try { downloadUrl(item.url, item.name); }
-    catch { this.update({ message: errorMessages.download }); }
+    catch { this.update({ message: errorMessages.download }); track('conversion_failed', { stage: 'download', reason: 'download' }); }
   }
   async downloadZip() {
     if (this.state.packing || this.state.running || this.state.importing) return;
@@ -134,7 +148,11 @@ export class ConversionQueue {
       this.downloads.set(url, setTimeout(() => this.releaseDownload(url), 30_000));
       downloadUrl(url, 'converted-images.zip');
     } catch (error) {
-      if (!controller.signal.aborted) this.update({ message: errorMessages[errorCode(error, 'zip')] });
+      if (!controller.signal.aborted) {
+        const reason = errorCode(error, 'zip');
+        this.update({ message: errorMessages[reason] });
+        track('conversion_failed', { stage: 'zip', reason });
+      }
     } finally { this.packing = undefined; this.update({ packing: false }); }
   }
 }

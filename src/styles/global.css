@@ -58,6 +58,10 @@
 .queue-toolbar h3 { font-size: 14px; }
 .count { margin-left: 9px; font-weight: 400; color: #71806f; font-size: 12px; }
 .queue-toolbar p { color: #6c786d; font-size: 12px; margin-top: 3px; }
+.queue-controls { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.skipped-files { margin: 0 26px 16px; padding: 12px 16px; background: #f7f4e8; font-size: 13px; }
+.skipped-files details { margin-top: 8px; }
+.skipped-files ul { padding-left: 20px; max-height: 150px; overflow: auto; overflow-wrap: anywhere; }
 .text-button { color: #345f42; font-size: 12px; font-weight: 600; background: none; border: 0; padding: 8px 3px; }
 .text-button:hover:enabled { text-decoration: underline; }
 .empty-queue { display: flex; align-items: center; justify-content: center; padding: 15px 20px 27px; gap: 15px; font-size: 13px; color: #697669; }
@@ -75,6 +79,16 @@
 .file-identity { display: flex; gap: 12px; align-items: center; min-width: 0; }
 .thumbnail { flex: 0 0 44px; height: 44px; border: 1px solid #dee5d9; border-radius: 3px; background-color: #f5f6f0; background-image: conic-gradient(#e2e7dd 25%,transparent 0 50%,#e2e7dd 0 75%,transparent 0); background-size: 12px 12px; display: grid; place-items: center; overflow: hidden; }
 .thumbnail img { width: 44px; height: 44px; object-fit: contain; }
+button.thumbnail:hover { border-color: #244c38; }
+.image-preview { margin: auto; padding: 20px; width: min(920px, calc(100% - 32px)); max-height: calc(100dvh - 32px); overflow: auto; border: 1px solid #ccd7ce; border-radius: 8px; background: #fff; color: #293b34; }
+.image-preview::backdrop { background: #18251fcc; }
+.preview-heading, .preview-footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.preview-heading { margin-bottom: 16px; }
+.preview-heading h2 { min-width: 0; overflow-wrap: anywhere; font-size: 18px; }
+.preview-heading form { flex-shrink: 0; }
+.preview-image { background-color: #fff; background-image: conic-gradient(#e2e7dd 25%,transparent 0 50%,#e2e7dd 0 75%,transparent 0); background-size: 20px 20px; }
+.preview-image img { display: block; margin: auto; max-width: 100%; max-height: 60dvh; width: auto; height: auto; object-fit: contain; }
+.preview-footer { margin-top: 16px; flex-wrap: wrap; font-size: 12px; }
 .thumbnail > span { background: #f3f5ee; width: 100%; text-align: center; color: #6d7d61; }
 .file-label { min-width: 0; }
 .file-label strong { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; font-weight: 600; }
@@ -143,7 +157,8 @@ details p { color: #67735f; font-size: 14px; padding: 13px 18px 4px 0; }
   .drop-hint { font-size: 12px; }
   .drop-limits { font-size: 10px; }
   .privacy-line { font-size: 10px; gap: 5px; padding-inline: 10px; }
-  .queue-toolbar { padding-inline: 16px; }
+  .queue-toolbar { padding-inline: 16px; flex-wrap: wrap; gap: 8px; }
+  .skipped-files { margin-inline: 16px; }
   .queue-toolbar p { font-size: 11px; }
   .tool-actions { padding: 16px; flex-wrap: wrap; gap: 9px; }
   .tool-actions .button { width: 100%; }

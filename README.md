@@ -1,6 +1,6 @@
 # WebP to PNG Converter
 
-英文静态工具站：选择或拖入 WebP → 浏览器原生解码 / Canvas 转 PNG → 单张下载或 ZIP。Astro 输出可直接读取的页面正文，React 只负责转换工具。没有后端、数据库、登录、图片上传或第三方转换 API。
+英文静态工具站：选择或拖入 WebP → 自动逐张转换 → 点击缩略图放大预览 → 单张下载或 ZIP。Astro 输出可直接读取的页面正文，React 只负责转换工具。没有后端、数据库、登录、图片上传或第三方转换 API。
 
 **本轮开发验收通过；没有线上部署或远程推送。** 正式域名、维护者与联系信息尚未配置，发布检查会阻止当前配置进入发布阶段。实际记录见 [开发记录](docs/development.md) 和 [验收报告](docs/acceptance.md)。
 
@@ -80,7 +80,7 @@ pnpm exec playwright show-report output/playwright/report
 | 网站名称、域名、维护者、邮箱 | `.env`；解析和发布规则在 `src/config/site.ts` |
 | 构建环境读取 | `src/config/build-site.ts`，显式读取 Astro 私有环境变量 |
 | 文件 / 像素 / 缓存 / ZIP 限制 | `src/config/limits.ts` |
-| 事件统计预留 | `src/lib/analytics.ts` |
+| 可选 Plausible 统计 | `.env` 的 `PLAUSIBLE_ENABLED`；发送与字段筛选在 `src/lib/analytics.ts` |
 | Cloudflare 项目名与静态路由 | `wrangler.jsonc` |
 
 `DEPLOY_ENV` 只允许 `local`、`preview`、`production`，不根据 `NODE_ENV` 决定索引：
@@ -93,7 +93,9 @@ pnpm exec playwright show-report output/playwright/report
 
 ## 功能限制与内存
 
-- 同一队列最多 10 张，单张输入最多 10,000,000 字节（10 MB），最多 20,000,000 像素。
+- 同一队列最多 10 张，单张输入最多 10,000,000 字节（10 MB），最多 20,000,000 像素。超量时接收剩余名额，列出未加入的文件名。
+- 校验结束后自动转换，无需手动开始；转换期间保持单任务锁。保存后可点 Remove completed 释放成功结果，保留失败文件供重试。
+- 点击完成图片的缩略图可放大预览透明区域；使用原生 dialog，支持 Esc、关闭按钮、键盘焦点返回与弹窗内下载。
 - 只支持静态 WebP。按 RIFF / VP8 / VP8L / VP8X 容器解析，不依赖后缀或 MIME；动画不输出第一帧。
 - 单线程受控队列逐张解码，解码后复核尺寸，使用透明 Canvas 导出 PNG。
 - 完成结果最多 100 MB；ZIP 最多读取 50 MB PNG，不再重压缩 PNG。ZIP 一次只打包一份，最多保留一个短期下载 URL。
@@ -104,16 +106,33 @@ pnpm exec playwright show-report output/playwright/report
 
 ## 统计与隐私
 
-本轮没有任何生产统计脚本或供应商账号配置。`track()` 在开发模式仅输出固定事件名、数量和枚举区间，构建产物中无网络统计发送；图片、文件名、路径、原始异常均不记录。
+统计**默认关闭**。local / preview 构建即使设置了开关也不会发送；正式构建被复制到其他域名时也不发送。未配置任何统计账号，本轮没有向生产统计服务发送测试数据。
 
-后续接入位置：
+可选接入使用 [Plausible Events API](https://plausible.io/docs/events-api)，直接通过浏览器原生 fetch 发送，不增加依赖、第三方自动采集脚本、Cookie 或持久化标识。
 
-- **Cloudflare Web Analytics**：在公共布局 `src/layouts/Layout.astro` 按正式环境条件启用已取得的站点 beacon；启用前更新 Privacy。
-- **GA4**：在 `src/lib/analytics.ts` 接入适配发送，仅传清理后的事件；脚本加载在公共布局统一管理。
-- **Microsoft Clarity**：统一在布局启用正式环境脚本，设置遮罩 / 排除整个文件列表、文件名和工具区域；不能把这些内容交给会话录制。更新 Privacy 并按实际适用要求处理同意机制。
-- **Google Search Console**：部署阶段在域名 DNS 中添加 Google 提供的 TXT 验证值，验证后提交实际 Sitemap index。此项目不生成伪造验证值。
+启用步骤：
 
-可不启用任何统计服务；统计 ID 缺失不会阻止工具运行。
+1. 在自己的 Plausible 账号中添加与 SITE_URL 完全一致的主机名（包括实际使用的 www 或子域）。服务账号及订阅由维护者自行配置；这里不创建账号或购买服务。
+2. 在正式构建环境设置 PLAUSIBLE_ENABLED=true，保持 DEPLOY_ENV=production，并重新构建。无需 API 密钥；留空或设为 false 即关闭。
+3. 在 Plausible 网站设置中添加以下同名 Custom event goals。按需要使用服务提供的筛选与漏斗报表。
+
+| 事件 | 含义 / 允许的属性 |
+| --- | --- |
+| pageview | 正式页面访问，无自定义属性 |
+| files_selected | 实际加入队列的文件数 count、size_bucket，包含随后校验失败的文件 |
+| conversion_started | 开始处理有效文件，count |
+| conversion_succeeded | 一批中至少有一张成功，count 为成功数；可作为漏斗中的成功节点 |
+| conversion_completed | 本批结束：success、failed、cancelled、duration_bucket；结束不等于成功 |
+| conversion_failed | 固定错误类别 reason 和阶段 stage（validation / conversion / zip / download） |
+| download_clicked | 点击下载，type 为 png / zip，count；不代表文件已保存到磁盘 |
+
+建议漏斗：pageview → files_selected → conversion_started → conversion_succeeded → download_clicked。重复选择或下载会产生多次事件，事件总数不能直接当作独立用户数。
+
+发送内容只含正式 canonical 地址、来源站点 origin 和上述白名单属性。去掉 URL 查询参数、片段和来源路径；不发送图片、文件名、本地路径或原始异常。404 页面不发送事件，避免收集任意访问路径。网络连接仍向服务暴露正常的 IP / 浏览器头，Privacy 页面会随开关自动说明当前行为。阻止统计或网络失败不会阻止转换，不重试统计请求。
+
+生产开关与 Privacy 由 SEO 构建矩阵验证；真实浏览器检查会拦截全部 Plausible 请求，检查漏斗、隐私与断网场景，不使用真实统计账号。
+
+Google Search Console 的 DNS 验证及 Sitemap 提交仍在正式部署后配置。
 
 ## 后续 GitHub + Cloudflare 部署
 

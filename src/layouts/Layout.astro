@@ -14,6 +14,7 @@ const canonical = site.origin && !noindex ? new URL(Astro.url.pathname, site.ori
     <meta name="description" content={description} />
     <meta name="robots" content={site.indexable && !noindex ? 'index, follow' : 'noindex, follow'} />
     {canonical && <link rel="canonical" href={canonical} />}
+    {site.analytics && canonical && <meta name="analytics-domain" content={new URL(canonical).hostname} />}
     <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
@@ -22,6 +23,10 @@ const canonical = site.origin && !noindex ? new URL(Astro.url.pathname, site.ori
     {canonical && <meta property="og:url" content={canonical} />}
     <meta name="theme-color" content="#244c38" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      import { track } from '../lib/analytics';
+      track('pageview');
+    </script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
