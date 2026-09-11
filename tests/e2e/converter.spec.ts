@@ -315,7 +315,7 @@ test('SEO is readable without JavaScript and converter controls are not falsely 
   const context = await browser.newContext({ javaScriptEnabled: false, viewport: { width: 1440, height: 900 } });
   const page = await context.newPage();
   await page.goto('http://127.0.0.1:8787/');
-  await expect(page.getByRole('heading', { name: 'WebP to PNG Converter', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Free WebP to PNG Converter', exact: true })).toBeVisible();
   await expect(page.locator('noscript p')).toContainText('This converter needs JavaScript');
   await expect(page.locator('noscript p')).toBeVisible();
   await expect(choose(page)).not.toBeVisible();
@@ -329,7 +329,7 @@ test('unhydrated island has a readable loading state and disabled controls', asy
   await page.goto('/');
   await expect(page.getByText('Loading the local converter…')).toBeVisible();
   await expect(choose(page)).toBeDisabled();
-  await expect(page.getByRole('heading', { name: 'WebP to PNG Converter', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Free WebP to PNG Converter', exact: true })).toBeVisible();
 });
 
 test('Cloudflare static routes, unique SEO, internal links, trailing slash and actual 404', async ({ page, request }) => {

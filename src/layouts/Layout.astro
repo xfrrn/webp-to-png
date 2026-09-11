@@ -4,6 +4,8 @@ import { buildSite as site } from '../config/build-site';
 interface Props { title: string; description: string; noindex?: boolean }
 const { title, description, noindex = false } = Astro.props;
 const canonical = site.origin && !noindex ? new URL(Astro.url.pathname, site.origin).href : undefined;
+const socialImage = canonical ? new URL('/guide/conversion.png', site.origin).href : undefined;
+const imageAlt = 'WebP to PNG converter showing completed images, output sizes, and PNG downloads.';
 ---
 <!doctype html>
 <html lang="en">
@@ -21,6 +23,18 @@ const canonical = site.origin && !noindex ? new URL(Astro.url.pathname, site.ori
     <meta property="og:site_name" content={site.name} />
     <meta property="og:locale" content="en_US" />
     {canonical && <meta property="og:url" content={canonical} />}
+    {socialImage && <>
+      <meta property="og:image" content={socialImage} />
+      <meta property="og:image:type" content="image/png" />
+      <meta property="og:image:width" content="1440" />
+      <meta property="og:image:height" content="900" />
+      <meta property="og:image:alt" content={imageAlt} />
+    </>}
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    {socialImage && <><meta name="twitter:image" content={socialImage} /><meta name="twitter:image:alt" content={imageAlt} /></>}
+    <slot name="head" />
     <meta name="theme-color" content="#244c38" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script>

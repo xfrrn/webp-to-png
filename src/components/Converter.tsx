@@ -26,7 +26,7 @@ export default function Converter() {
   const totalBytes = state.items.reduce((sum, item) => sum + (item.blob?.size || 0), 0);
 
   return <section className="converter" aria-label="Image converter">
-    <div className="tool-heading"><h2>Convert your images</h2><span>WEBP <span aria-hidden="true">→</span> PNG</span></div>
+    <div className="tool-heading"><h2>Convert WebP to PNG online</h2><span>WEBP <span aria-hidden="true">→</span> PNG</span></div>
     {!ready && <p className="loading-tool" role="status">Loading the local converter…</p>}
     <div className={`dropzone ${dragging ? 'is-dragging' : ''}`}
       onDragEnter={event => { event.preventDefault(); dragDepth.current++; setDragging(true); }}
